@@ -1,0 +1,229 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>AGS Pro - Excel to Tally</title>
+<link rel="stylesheet" href="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/css/bootstrap.min.css">
+<style>
+    body {
+        font-family: Arial, sans-serif;
+        background-color: #f8f9fa;
+    }
+    .container {
+        margin-top: 50px;
+    }
+    #myTable th {
+        background-color: #007bff;
+        color: #fff;
+    }
+    #myTable td {
+        background-color: #fff;
+    }
+    #myTable th,
+    #myTable td {
+        text-align: center;
+    }
+    #addBtn,
+    #deleteBtn,
+    #clearBtn,
+    #generateBtn,
+    #uploadBtn {
+        margin: 5px;
+    }
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="row">
+        <div class="col-md-12">
+            <h2 class="text-center mb-4">AGS Pro - Excel to Tally</h2>
+            <div class="form-row mb-3">
+                <div class="col">
+                    <input type="text" id="bankName" class="form-control" placeholder="Enter Bank Name as per Tally Data">
+                </div>
+                <div class="col">
+                    <button id="submitBankBtn" class="btn btn-primary">Submit Bank Name</button>
+                </div>
+            </div>
+            <input type="file" id="fileInput" class="btn btn-primary mb-3" accept=".xlsx, .xls">
+            <button id="uploadBtn" class="btn btn-success mb-3">Upload Excel</button>
+            <button id="addBtn" class="btn btn-primary mb-3">Add Row</button>
+            <button id="deleteBtn" class="btn btn-danger mb-3">Delete Row</button>
+            <button id="clearBtn" class="btn btn-warning mb-3">Clear Table</button>
+            <button id="generateBtn" class="btn btn-info mb-3">Generate XML</button>
+            <table id="myTable" class="table table-bordered table-striped mt-4">
+                <!-- Table headers -->
+                <thead class="thead-dark">
+                    <tr>
+                        <th>Date</th>
+                        <th>Voucher Type</th>
+                        <th>Voucher Number</th>
+                        <th>DR/CR</th>
+                        <th>Party Details</th>
+                        <th>Debit Ledger</th>
+                        <th>Credit Ledger</th>
+                        <th>Amount in Single Column</th>
+                        <th>Debit Amount</th>
+                        <th>Credit Amount</th>
+                        <th>Narration</th>
+                    </tr>
+                </thead>
+                <!-- Sample row -->
+                <tbody>
+                    <!-- Sample row -->
+                    <tr>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                        <td contenteditable="true"></td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+    </div>
+</div>
+<script src="https://code.jquery.com/jquery-3.5.1.min.js"></script>
+<script src="https://stackpath.bootstrapcdn.com/bootstrap/4.5.2/js/bootstrap.min.js"></script>
+<script>
+    $(document).ready(function () {
+        // Submit Bank Name button click event
+        $('#submitBankBtn').click(function () {
+            var bankName = $('#bankName').val();
+            $('#bankName').prop('readonly', true); // Disable Bank Name input
+        });
+
+        // Upload Excel button click event (to be continued)
+        $('#uploadBtn').click(function () {
+            $('#fileInput').click();
+        });
+
+        // Rest of the code...
+
+
+        $('#fileInput').change(function () {
+            var bankName = $('#bankName').val();
+            var formData = new FormData();
+            var file = $(this)[0].files[0];
+            formData.append('file', file);
+            formData.append('bankName', bankName);
+            $.ajax({
+                url: '/upload',
+                type: 'POST',
+                data: formData,
+                contentType: false,
+                processData: false,
+                success: function (data) {
+                    $('#myTable tbody').empty();
+                    $.each(data, function (index, row) {
+                        // Determine Voucher Type
+                        if (!row["Voucher Type"]) {
+                            if (row["DR/CR"].match(/dr/i)) {
+                                row["Voucher Type"] = "Payment";
+                            } else if (row["DR/CR"].match(/cr/i)) {
+                                row["Voucher Type"] = "Receipt";
+                            } else if (row["Debit Amount"] && parseFloat(row["Debit Amount"]) > 0) {
+                                row["Voucher Type"] = "Payment";
+                            } else if (!row["Debit Amount"] || parseFloat(row["Debit Amount"]) === 0) {
+                                row["Voucher Type"] = "Receipt";
+                            }
+                        }
+
+                        // Populate DR/CR if empty
+                        if (!row["DR/CR"]) {
+                            if (row["Debit Amount"] && parseFloat(row["Debit Amount"]) > 0) {
+                                row["DR/CR"] = "DR";
+                            } else if (row["Credit Amount"] && parseFloat(row["Credit Amount"]) > 0) {
+                                row["DR/CR"] = "CR";
+                            }
+                        }
+
+                        // Populate Party Details if empty
+                        if (!row["Party Details"]) {
+                            row["Party Details"] = "XXX";
+                        }
+
+                        // Determine Debit and Credit Ledgers
+                        if (row["Voucher Type"] === "Payment") {
+                            row["Debit Ledger"] = row["Party Details"];
+                            row["Credit Ledger"] = bankName;
+                        } else if (row["Voucher Type"] === "Receipt") {
+                            row["Debit Ledger"] = bankName;
+                            row["Credit Ledger"] = row["Party Details"];
+                        }
+
+                        // Populate Amount in Single Column if empty
+                        if (!row["Amount in Single Column"]) {
+                            var debitAmount = parseFloat(row["Debit Amount"]) || 0;
+                            var creditAmount = parseFloat(row["Credit Amount"]) || 0;
+                            row["Amount in Single Column"] = (debitAmount + creditAmount).toFixed(2);
+                        }
+
+                        // Populate Debit Amount and Credit Amount if empty
+                        if (!row["Debit Amount"] && row["Voucher Type"] === "Payment") {
+                            row["Debit Amount"] = row["Amount in Single Column"];
+                        } else if (!row["Credit Amount"] && row["Voucher Type"] === "Receipt") {
+                            row["Credit Amount"] = row["Amount in Single Column"];
+                        }
+
+                        // Append row to table
+                        $('#myTable tbody').append('<tr><td contenteditable="true">' + row["Date"] + '</td><td contenteditable="true">' + row["Voucher Type"] + '</td><td contenteditable="true">' + row["Voucher Number"] + '</td><td contenteditable="true">' + row["DR/CR"] + '</td><td contenteditable="true">' + row["Party Details"] + '</td><td contenteditable="true">' + row["Debit Ledger"] + '</td><td contenteditable="true">' + row["Credit Ledger"] + '</td><td contenteditable="true">' + row["Amount in Single Column"] + '</td><td contenteditable="true">' + row["Debit Amount"] + '</td><td contenteditable="true">' + row["Credit Amount"] + '</td><td contenteditable="true">' + row["Narration"] + '</td></tr>');
+                    });
+                },
+                error: function (xhr, status, error) {
+                    alert('Error uploading file');
+                }
+            });
+        });
+
+        $('#addBtn').click(function () {
+            $('#myTable tbody').append('<tr><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td><td contenteditable="true"></td></tr>');
+        });
+
+        $('#deleteBtn').click(function () {
+            if ($('#myTable tbody tr').length > 1) {
+                $('#myTable tbody tr:last').remove();
+            }
+        });
+
+        $('#clearBtn').click(function () {
+            $('#myTable tbody').empty();
+        });
+
+        $('#generateBtn').click(function () {
+            var data = [];
+            $('#myTable tbody tr').each(function () {
+                var row = {};
+                $(this).find('td').each(function (index, cell) {
+                    row[$('#myTable thead th:eq(' + index + ')').text()] = $(cell).text();
+                });
+                data.push(row);
+            });
+            $.ajax({
+                url: '/generate_xml',
+                type: 'POST',
+                contentType: 'application/json',
+                data: JSON.stringify(data),
+                success: function (response) {
+                    var link = document.createElement('a');
+                    link.href = 'data:text/xml;charset=utf-8,' + encodeURIComponent(response);
+                    link.download = 'data.xml';
+                    link.click();
+                },
+                error: function (xhr, status, error) {
+                    alert('Error generating XML');
+                }
+            });
+        });
+    });
+</script>
+</body>
+</html>
+
